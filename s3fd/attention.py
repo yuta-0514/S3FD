@@ -117,7 +117,6 @@ class SKAttention(nn.Module):
 
         ### split
         for conv in self.convs:
-            print(conv)
             conv_outs.append(conv(x))
         feats=torch.stack(conv_outs,0)#k,bs,channel,h,w
 
