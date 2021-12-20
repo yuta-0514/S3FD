@@ -48,47 +48,68 @@ class S3FDNet(nn.Module):
         super(S3FDNet, self).__init__()
         self.device = 'cuda'
         self.phase = phase
+        self.SE_Block64 = SEBlock(channel=64)
+        self.SE_Block128 = SEBlock(channel=128)
+        self.SE_Block256 = SEBlock(channel=256)
+        self.SE_Block512 = SEBlock(channel=512)
+        self.SE_Block1024 = SEBlock(channel=1024)
+
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block64,
             nn.Conv2d(64, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block64,
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(64, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block128,
             nn.Conv2d(128, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block128,
             nn.MaxPool2d(2, 2),
             
             nn.Conv2d(128, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block256,
             nn.Conv2d(256, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block256,
             nn.Conv2d(256, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block256,
             nn.MaxPool2d(2, 2, ceil_mode=True),
             
             nn.Conv2d(256, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block512,
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
+            self.SE_Block512,
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 1024, 3, 1, padding=6, dilation=6),
             nn.ReLU(inplace=True),
+            self.SE_Block1024,
             nn.Conv2d(1024, 1024, 1, 1),
             nn.ReLU(inplace=True),
+            self.SE_Block1024,
         ])
 
         self.L2Norm3_3 = L2Norm(256, 10)
@@ -123,10 +144,7 @@ class S3FDNet(nn.Module):
         if self.phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
             self.detect = Detect()
-        
-        self.SE_Block256 = SEBlock(channel=256)
-        self.SE_Block512 = SEBlock(channel=512)
-        self.SE_Block1024 = SEBlock(channel=1024)
+
 
     def forward(self, x):
         size = x.size()[2:]
@@ -134,35 +152,35 @@ class S3FDNet(nn.Module):
         loc = list()
         conf = list()
 
-        for k in range(16):
+        for k in range(23):
             x = self.vgg[k](x)
-        s = self.SE_Block256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
-        for k in range(16, 23):
+        for k in range(23, 33):
             x = self.vgg[k](x)
-        s = self.SE_Block512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
-        for k in range(23, 30):
+        for k in range(33, 43):
             x = self.vgg[k](x)
-        s = self.SE_Block512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
-        for k in range(30, len(self.vgg)):
+        for k in range(43, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.SE_Block1024(x)
         sources.append(x)
         
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
-            if k == 1:
+            if k == 0:
+                x = self.SE_Block256(x)
+            elif k == 1:
                 x = self.SE_Block512(x)
                 sources.append(x)
+            elif k == 2:
+                x = self.SE_Block128(x)
             elif k == 3:
                 x = self.SE_Block256(x)
                 sources.append(x)
