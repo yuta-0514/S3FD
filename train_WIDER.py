@@ -18,7 +18,6 @@ writer = SummaryWriter(log_dir="./logs")
 
 from dataset import make_dataset, detection_collate
 from dataset import make_masked_dataset #Masked face
-from dataset import MAFA_dataset
 from s3fd.nets import S3FDNet,weights_init
 from s3fd.multiboxloss import MultiBoxLoss
 from s3fd.box_utils import PriorBox
@@ -234,7 +233,6 @@ def main():
     print('Loading wider dataset...')
 
     if args.masked==True:
-        # train_dataset, val_dataset = MAFA_dataset()
         train_dataset, val_dataset = make_masked_dataset()
     else:
         train_dataset, val_dataset = make_masked_dataset()

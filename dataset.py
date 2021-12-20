@@ -19,13 +19,6 @@ def make_masked_dataset():
     return train_dataset, val_dataset
 
 
-# マスクありのとき(MAFA)
-def MAFA_dataset():
-    train_dataset = WIDERDetection('/mnt/MAFA/train_anno.txt', mode='train')
-    val_dataset = WIDERDetection('/mnt/MAFA/val_anno.txt', mode='val')
-    return train_dataset, val_dataset
-
-
 class WIDERDetection(data.Dataset):
     def __init__(self, list_file, mode='train'):
         super(WIDERDetection, self).__init__()
