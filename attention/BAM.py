@@ -81,11 +81,11 @@ class BAMBlock(nn.Module):
         out=(1+weight)*x
         return out
 
-
+'''
 # trainingでbatch_sizeを１にしかできない場合はeval modeにすると動く
 input=torch.randn(1,256,160,160)
 bam = BAMBlock(channel=256,reduction=16)
 bam.eval()
 output=bam(input)
 print(output.shape)
-
+'''
