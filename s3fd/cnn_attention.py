@@ -136,36 +136,33 @@ class S3FDNet(nn.Module):
         loc = list()
         conf = list()
 
-        for k in range(16):
+        for k in range(23):
             x = self.vgg[k](x)
-        x = self.BAMBlock256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
-        for k in range(16, 23):
+        for k in range(23, 33):
             x = self.vgg[k](x)
-        x = self.BAMBlock512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
-        for k in range(23, 30):
+        for k in range(33, 43):
             x = self.vgg[k](x)
-        x = self.BAMBlock512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
-        for k in range(30, len(self.vgg)):
+        for k in range(43, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.BAMBlock1024(x)
         sources.append(x)
+
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.BAMBlock512(x)
+                # x = self.BAMBlock512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.BAMBlock256(x)
+                # x = self.BAMBlock256(x)
                 sources.append(x)
             else :
                 continue
