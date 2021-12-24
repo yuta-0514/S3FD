@@ -6,23 +6,6 @@ from s3fd.box_utils import PriorBox,Detect
 from attention.BAM import BAMBlock
 
 
-class SEBlock(nn.Module):
-    def __init__(self, channel, reduction=16):
-        super(SEBlock, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y.expand_as(x)
-
 class L2Norm(nn.Module):
 
     def __init__(self, n_channels, scale):
@@ -155,30 +138,30 @@ class S3FDNet(nn.Module):
 
         for k in range(16):
             x = self.vgg[k](x)
-        x = BAMBlock256(x)
+        x = self.BAMBlock256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
-        x = BAMBlock512(x)
+        x = self.BAMBlock512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
-        x = BAMBlock512(x)
+        x = self.BAMBlock512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = BAMBlock1024(x)
+        x = self.BAMBlock1024(x)
         sources.append(x)
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
-            elif k == 1:
+            if k == 1:
                 x = self.BAMBlock512(x)
                 sources.append(x)
             elif k == 3:
