@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.BAM import BAMBlock
 
 
 class SEBlock(nn.Module):
@@ -50,10 +49,9 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.BAMBlock128 = BAMBlock(channel=128)
-        self.BAMBlock256 = BAMBlock(channel=256)
-        self.BAMBlock512 = BAMBlock(channel=512)
-        self.BAMBlock1024 = BAMBlock(channel=1024)
+        self.SEBlock128 = SEBlock(channel=128)
+        self.SEBlock256 = SEBlock(channel=256)
+        self.SEBlock512 = SEBlock(channel=512)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
@@ -139,34 +137,34 @@ class S3FDNet(nn.Module):
 
         for k in range(16):
             x = self.vgg[k](x)
-        x = BAMBlock256(x)
+        x = SEBlock256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
-        x = BAMBlock512(x)
+        x = SEBlock512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
-        x = BAMBlock512(x)
+        x = SEBlock512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = BAMBlock1024(x)
+        x = SEBlock1024(x)
         sources.append(x)
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             elif k == 1:
-                x = self.BAMBlock512(x)
+                x = self.SEBlock512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.BAMBlock256(x)
+                x = self.SEBlock256(x)
                 sources.append(x)
             else :
                 continue
