@@ -254,7 +254,7 @@ def main():
     model = s3fd_net
 
     # 学習済みのvggを取得
-    vgg_weights = torch.load('/mnt/weights/' + 'pre.pth')
+    vgg_weights = torch.load('/mnt/weights/' + 'ECA_pre10.pth')
     print('Load base network....')
     model.load_state_dict(vgg_weights)
 
