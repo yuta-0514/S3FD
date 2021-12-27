@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.BAM import BAMBlock
+from attention.ECA import ECAAttention
 
 
 class L2Norm(nn.Module):
@@ -33,68 +33,69 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.BAMBlock64 = BAMBlock(channel=64)
-        self.BAMBlock128 = BAMBlock(channel=128)
-        self.BAMBlock256 = BAMBlock(channel=256)
-        self.BAMBlock512 = BAMBlock(channel=512)
-        self.BAMBlock1024 = BAMBlock(channel=1024)
+        self.ECAAttention64 = ECAAttention()
+        self.ECAAttention128 = ECAAttention()
+        self.ECAAttention256 = ECAAttention()
+        self.ECAAttention512 = ECAAttention()
+        self.ECAAttention1024 = ECAAttention()
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock64,
+            self.ECAAttention64,
             nn.Conv2d(64, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock64,
+            self.ECAAttention64,
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(64, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock128,
+            self.ECAAttention128,
             nn.Conv2d(128, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock128,
+            self.ECAAttention128,
             nn.MaxPool2d(2, 2),
             
             nn.Conv2d(128, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock256,
+            self.ECAAttention256,
             nn.Conv2d(256, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock256,
+            self.ECAAttention256,
             nn.Conv2d(256, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock256,
+            self.ECAAttention256,
             nn.MaxPool2d(2, 2, ceil_mode=True),
             
             nn.Conv2d(256, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.ECAAttention512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.ECAAttention512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.ECAAttention512,
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.ECAAttention512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.ECAAttention512,
             nn.Conv2d(512, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.ECAAttention512,
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 1024, 3, 1, padding=6, dilation=6),
             nn.ReLU(inplace=True),
-            self.BAMBlock1024,
+            self.ECAAttention1024,
             nn.Conv2d(1024, 1024, 1, 1),
             nn.ReLU(inplace=True),
-            self.BAMBlock1024,
+            self.ECAAttention1024,
+            
         ])
 
         self.L2Norm3_3 = L2Norm(256, 10)
