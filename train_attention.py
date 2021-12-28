@@ -20,6 +20,10 @@ from s3fd.cnn_attention import S3FDNet,weights_init
 from s3fd.multiboxloss import MultiBoxLoss
 from s3fd.box_utils import PriorBox
 
+from torch.cuda.amp import GradScaler, autocast
+
+scaler = GradScaler()
+
 
 def to_python_float(t):
     if hasattr(t, 'item'):
@@ -106,24 +110,27 @@ def main():
             input_var = Variable(input.to(device))
             target_var = [Variable(ann.to(device), requires_grad=False) for ann in targets]
 
-            # compute output
-            output = model(input_var)
-            loss_l, loss_c = criterion(output, priors,target_var)
-            loss = loss_l + loss_c
+            with autocast():
+                # compute output
+                output = model(input_var)
+                loss_l, loss_c = criterion(output, priors,target_var)
+                loss = loss_l + loss_c
 
-            reduced_loss = loss.data
-            reduced_loss_l = loss_l.data
-            reduced_loss_c = loss_c.data
-            losses.update(to_python_float(reduced_loss), input.size(0))
-            loc_loss.update(to_python_float(reduced_loss_l), input.size(0))
-            cls_loss.update(to_python_float(reduced_loss_c), input.size(0))
+                reduced_loss = loss.data
+                reduced_loss_l = loss_l.data
+                reduced_loss_c = loss_c.data
+                losses.update(to_python_float(reduced_loss), input.size(0))
+                loc_loss.update(to_python_float(reduced_loss_l), input.size(0))
+                cls_loss.update(to_python_float(reduced_loss_c), input.size(0))
 
-            # compute gradient and do SGD step
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # compute gradient and do SGD step
+                optimizer.zero_grad()
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                model.zero_grad()
 
-            torch.cuda.synchronize()
+                torch.cuda.synchronize()
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
@@ -167,19 +174,20 @@ def main():
             input_var = Variable(input.to(device))
             target_var = [Variable(ann.to(device), requires_grad=False) for ann in targets]
 
+            with autocast():
             # compute output
-            output = model(input_var)
-            loss_l, loss_c = criterion(output, priors, target_var)
-            loss = loss_l + loss_c
+                output = model(input_var)
+                loss_l, loss_c = criterion(output, priors, target_var)
+                loss = loss_l + loss_c
 
-            reduced_loss = loss.data
-            reduced_loss_l = loss_l.data
-            reduced_loss_c = loss_c.data
-            losses.update(to_python_float(reduced_loss), input.size(0))
-            loc_loss.update(to_python_float(reduced_loss_l), input.size(0))
-            cls_loss.update(to_python_float(reduced_loss_c), input.size(0))
+                reduced_loss = loss.data
+                reduced_loss_l = loss_l.data
+                reduced_loss_c = loss_c.data
+                losses.update(to_python_float(reduced_loss), input.size(0))
+                loc_loss.update(to_python_float(reduced_loss_l), input.size(0))
+                cls_loss.update(to_python_float(reduced_loss_c), input.size(0))
 
-            torch.cuda.synchronize()
+                torch.cuda.synchronize()
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
@@ -286,8 +294,8 @@ def main():
         save_checkpoint(model.state_dict(), is_best, epoch)
         epoch_time = time.time() -end
         print('Epoch %s time cost %f' %(epoch, epoch_time))
-        model.zero_grad()
-        
+
+    model.zero_grad()      
     torch.cuda.empty_cache() #GPUのメモリ不足を防ぐ
 
 if __name__ == '__main__':
