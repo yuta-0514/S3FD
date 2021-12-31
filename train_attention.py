@@ -16,7 +16,7 @@ import torch.backends.cudnn as cudnn
 
 from dataset import make_dataset, detection_collate
 from dataset import make_masked_dataset #Masked face
-from s3fd.cnn_attention import S3FDNet,weights_init
+from s3fd.map_attention import S3FDNet,weights_init
 from s3fd.multiboxloss import MultiBoxLoss
 from s3fd.box_utils import PriorBox
 
@@ -262,9 +262,9 @@ def main():
     model = s3fd_net
 
     # 学習済みのvggを取得
-    vgg_weights = torch.load('/mnt/weights/' + 'ECA_pre10.pth')
+    vgg_weights = torch.load('/mnt/weights/' + 'vgg16_reducedfc.pth')
     print('Load base network....')
-    model.load_state_dict(vgg_weights)
+    model.vgg.load_state_dict(vgg_weights)
 
     model = model.to(device)
     optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)

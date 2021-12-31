@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.BAM import BAMBlock
+from attention.Shuffle_Attention import ShuffleAttention
 
 
 class L2Norm(nn.Module):
@@ -33,10 +33,10 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.BAMBlock128 = BAMBlock(channel=128)
-        self.BAMBlock256 = BAMBlock(channel=256)
-        self.BAMBlock512 = BAMBlock(channel=512)
-        self.BAMBlock1024 = BAMBlock(channel=1024)
+        self.ShuffleAttention128 = ShuffleAttention(channel=128)
+        self.ShuffleAttention256 = ShuffleAttention(channel=256)
+        self.ShuffleAttention512 = ShuffleAttention(channel=512)
+        self.ShuffleAttention1024 = ShuffleAttention(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
@@ -112,7 +112,7 @@ class S3FDNet(nn.Module):
 
         if self.phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
-            self.detect = Detect()
+            self.detect = Detect.apply
 
     def forward(self, x):
         size = x.size()[2:]
@@ -122,34 +122,34 @@ class S3FDNet(nn.Module):
 
         for k in range(16):
             x = self.vgg[k](x)
-        x = self.BAMBlock256(x)
         s = self.L2Norm3_3(x)
+        s = self.ShuffleAttention256(s)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
-        x = self.BAMBlock512(x)
         s = self.L2Norm4_3(x)
+        s = self.ShuffleAttention512(s)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
-        x = self.BAMBlock512(x)
         s = self.L2Norm5_3(x)
+        s = self.ShuffleAttention512(s)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.BAMBlock1024(x)
+        x = self.ShuffleAttention1024(x)
         sources.append(x)
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.BAMBlock512(x)
+                x = self.ShuffleAttention512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.BAMBlock256(x)
+                x = self.ShuffleAttention256(x)
                 sources.append(x)
             else :
                 continue
