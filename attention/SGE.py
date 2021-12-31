@@ -50,10 +50,10 @@ class SpatialGroupEnhance(nn.Module):
 
         return x 
 
-
+'''
 input=torch.randn(1,512,160,160)
 sge = SpatialGroupEnhance(groups=8)
 output=sge(input)
 print(output.shape)
-
+'''
     

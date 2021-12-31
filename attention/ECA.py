@@ -36,10 +36,10 @@ class ECAAttention(nn.Module):
         y=y.permute(0,2,1).unsqueeze(-1) #bs,c,1,1
         return x*y.expand_as(x)
 
-
+'''
 input=torch.randn(1,256,160,160)
 eca = ECAAttention(kernel_size=3)
 output=eca(input)
 print(output.shape)
-
+'''
     

@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.Shuffle_Attention import ShuffleAttention
-
+from attention.CBAM import CBAMBlock
 
 class L2Norm(nn.Module):
 
@@ -33,10 +32,10 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.ShuffleAttention128 = ShuffleAttention(channel=128)
-        self.ShuffleAttention256 = ShuffleAttention(channel=256)
-        self.ShuffleAttention512 = ShuffleAttention(channel=512)
-        self.ShuffleAttention1024 = ShuffleAttention(channel=1024)
+        self.CBAMBlock128 = CBAMBlock(channel=128)
+        self.CBAMBlock256 = CBAMBlock(channel=256)
+        self.CBAMBlock512 = CBAMBlock(channel=512)
+        self.CBAMBlock1024 = CBAMBlock(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
@@ -123,33 +122,33 @@ class S3FDNet(nn.Module):
         for k in range(16):
             x = self.vgg[k](x)
         s = self.L2Norm3_3(x)
-        s = self.ShuffleAttention256(s)
+        s = self.CBAMBlock256(s)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
         s = self.L2Norm4_3(x)
-        s = self.ShuffleAttention512(s)
+        s = self.CBAMBlock512(s)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
         s = self.L2Norm5_3(x)
-        s = self.ShuffleAttention512(s)
+        s = self.CBAMBlock512(s)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.ShuffleAttention1024(x)
+        x = self.CBAMBlock1024(x)
         sources.append(x)
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.ShuffleAttention512(x)
+                x = self.CBAMBlock512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.ShuffleAttention256(x)
+                x = self.CBAMBlock256(x)
                 sources.append(x)
             else :
                 continue
