@@ -3,6 +3,12 @@ import torch
 from torch import nn
 from torch.nn import init
 
+
+def conv1x1(in_planes, out_planes, stride=1):
+    """1x1 convolution"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
+    
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, groups=1):
     """standard convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
@@ -73,9 +79,49 @@ class PSA(nn.Module):
 
         return out
 
+
+class EPSABlock(nn.Module):
+    expansion = 4
+
+    def __init__(self, channel, stride=1, downsample=None, norm_layer=None, conv_kernels=[3, 5, 7, 9],
+                 conv_groups=[1, 4, 8, 16]):
+        super(EPSABlock, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1(channel, channel//4)
+        self.bn1 = norm_layer(channel//4)
+        self.conv2 = PSA(channel//4, stride=stride, conv_kernels=conv_kernels, conv_groups=conv_groups)
+        self.bn2 = norm_layer(channel//4)
+        self.conv3 = conv1x1(channel//4, channel//4 * self.expansion)
+        self.bn3 = norm_layer(channel//4 * self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+        return out
+
 input=torch.randn(1,256,160,160)
-psa = PSA(channel=256)
+psa = EPSABlock(channel=256)
 output=psa(input)
 print(output.shape)
-
     
