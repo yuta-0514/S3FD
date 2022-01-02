@@ -4,9 +4,7 @@ from torch import nn
 from torch.nn import init
 
 
-# 1. PSAをそのまま使用する
-
-# 2. PSA+ECA
+# 1. PSA+ECA
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, groups=1):
     """standard convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
@@ -74,7 +72,7 @@ class PSA_ECA(nn.Module):
         return out
 
 
-# 3. PSA＋SGE
+# 2. PSA＋SGE
 class SEWeightModule(nn.Module):
 
     def __init__(self, channels, reduction=16):
@@ -154,7 +152,7 @@ class PSA_SGE(nn.Module):
         return out
 
 
-# 4. PSA+SGE+ECA
+# 3. PSA+SGE+ECA
 class PSA_SGE_ECA(nn.Module):
 
     def __init__(self, channel, groups=4):
@@ -216,79 +214,11 @@ class PSA_SGE_ECA(nn.Module):
         return out
 
 
-# 5. Suffle Attention
-from torch.nn.parameter import Parameter
+# 4. 3×3Conv -> EPSA
 
-class ShuffleAttention(nn.Module):
-
-    def __init__(self, channel,reduction=16,G=8):
-        super().__init__()
-        self.G=G
-        self.channel=channel
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.gn = nn.GroupNorm(channel // (2 * G), channel // (2 * G))
-        self.cweight = Parameter(torch.zeros(1, channel // (2 * G), 1, 1))
-        self.cbias = Parameter(torch.ones(1, channel // (2 * G), 1, 1))
-        self.sweight = Parameter(torch.zeros(1, channel // (2 * G), 1, 1))
-        self.sbias = Parameter(torch.ones(1, channel // (2 * G), 1, 1))
-        self.sigmoid=nn.Sigmoid()
-
-
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                init.kaiming_normal_(m.weight, mode='fan_out')
-                if m.bias is not None:
-                    init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                init.constant_(m.weight, 1)
-                init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                init.normal_(m.weight, std=0.001)
-                if m.bias is not None:
-                    init.constant_(m.bias, 0)
-
-
-    @staticmethod
-    def channel_shuffle(x, groups):
-        b, c, h, w = x.shape
-        x = x.reshape(b, groups, -1, h, w)
-        x = x.permute(0, 2, 1, 3, 4)
-
-        # flatten
-        x = x.reshape(b, -1, h, w)
-
-        return x
-
-    def forward(self, x):
-        b, c, h, w = x.size()
-        #group into subfeatures
-        x=x.view(b*self.G,-1,h,w) #bs*G,c//G,h,w
-
-        #channel_split
-        x_0,x_1=x.chunk(2,dim=1) #bs*G,c//(2*G),h,w
-
-        #channel attention
-        x_channel=self.avg_pool(x_0) #bs*G,c//(2*G),1,1
-        x_channel=self.cweight*x_channel+self.cbias #bs*G,c//(2*G),1,1
-        x_channel=x_0*self.sigmoid(x_channel)
-
-        #spatial attention
-        x_spatial=self.gn(x_1) #bs*G,c//(2*G),h,w
-        x_spatial=self.sweight*x_spatial+self.sbias #bs*G,c//(2*G),h,w
-        x_spatial=x_1*self.sigmoid(x_spatial) #bs*G,c//(2*G),h,w
-
-        # concatenate along channel axis
-        out=torch.cat([x_channel,x_spatial],dim=1)  #bs*G,c//G,h,w
-        out=out.contiguous().view(b,-1,h,w)
-
-        # channel shuffle
-        out = self.channel_shuffle(out, 2)
-        return out
-
+# 5. Suffle Attentionをそのまま利用する
 
 input=torch.randn(1,256,160,160)
-attention = ShuffleAttention(channel=256)
-output=attention(input)
+psa = PSA_ECA(channel=256)
+output=psa(input)
 print(output.shape)
-
