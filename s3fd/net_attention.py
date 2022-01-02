@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.BAM import BAMBlock
-
+from attention.Shuffle_Attention import SABlock
 
 class SEBlock(nn.Module):
     def __init__(self, channel, reduction=16):
@@ -50,52 +49,52 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.BAMBlock64 = BAMBlock(channel=64)
-        self.BAMBlock128 = BAMBlock(channel=128)
-        self.BAMBlock256 = BAMBlock(channel=256)
-        self.BAMBlock512 = BAMBlock(channel=512)
-        self.BAMBlock1024 = BAMBlock(channel=1024)
+        self.SABlock64 = SABlock(channel=64)
+        self.SABlock128 = SABlock(channel=128)
+        self.SABlock256 = SABlock(channel=256)
+        self.SABlock512 = SABlock(channel=512)
+        self.SABlock1024 = SABlock(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock64,
+            self.SABlock64,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(64, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock128,
+            self.SABlock128,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
             
             nn.Conv2d(128, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock256,
+            self.SABlock256,
             nn.ReLU(inplace=True),
-            self.BAMBlock256,
+            self.SABlock256,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2, ceil_mode=True),
             
             nn.Conv2d(256, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.SABlock512,
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.SABlock512,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            self.BAMBlock512,
+            self.SABlock512,
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.SABlock512,
             nn.ReLU(inplace=True),
-            self.BAMBlock512,
+            self.SABlock512,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 1024, 3, 1, padding=6, dilation=6),
             nn.ReLU(inplace=True),
-            self.BAMBlock1024,
+            self.SABlock1024,
             nn.ReLU(inplace=True),
         ])
 
@@ -140,35 +139,35 @@ class S3FDNet(nn.Module):
 
         for k in range(16):
             x = self.vgg[k](x)
-        s = self.BAMBlock256(x)
+        s = self.SABlock256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
-        s = self.BAMBlock512(x)
+        s = self.SABlock512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
-        s = self.BAMBlock512(x)
+        s = self.SABlock512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.BAMBlock1024(x)
+        x = self.SABlock1024(x)
         sources.append(x)
         
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.BAMBlock512(x)
+                x = self.SABlock512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.BAMBlock256(x)
+                x = self.SABlock256(x)
                 sources.append(x)
             else :
                 continue
