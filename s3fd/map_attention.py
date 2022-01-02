@@ -3,7 +3,24 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.EPSA import PSA
+from attention.ECA import ECAAttention
+from attention.SGE import SpatialGroupEnhance
+
+class BAM(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.ca=ECAAttention(kernel_size=3)
+        self.sa=SpatialGroupEnhance(groups=8)
+        self.sigmoid=nn.Sigmoid()
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        sa_out=self.sa(x)
+        ca_out=self.ca(x)
+        weight=self.sigmoid(sa_out+ca_out)
+        out=(1+weight)*x
+        return out
 
 class L2Norm(nn.Module):
 
@@ -32,10 +49,10 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.PSABlock128 = PSA(channel=128)
-        self.PSABlock256 = PSA(channel=256)
-        self.PSABlock512 = PSA(channel=512)
-        self.PSABlock1024 = PSA(channel=1024)
+        self.BAMBlock128 = BAM()
+        self.BAMBlock256 = BAM()
+        self.BAMBlock512 = BAM()
+        self.BAMBlock1024 = BAM()
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
@@ -122,33 +139,33 @@ class S3FDNet(nn.Module):
         for k in range(16):
             x = self.vgg[k](x)
         s = self.L2Norm3_3(x)
-        s = self.PSABlock256(s)
+        s = self.BAMBlock256(s)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
         s = self.L2Norm4_3(x)
-        s = self.PSABlock512(s)
+        s = self.BAMBlock512(s)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
         s = self.L2Norm5_3(x)
-        s = self.PSABlock512(s)
+        s = self.BAMBlock512(s)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.PSABlock1024(x)
+        x = self.BAMBlock1024(x)
         sources.append(x)
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.PSABlock512(x)
+                x = self.BAMBlock512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.PSABlock256(x)
+                x = self.BAMBlock256(x)
                 sources.append(x)
             else :
                 continue
@@ -187,7 +204,7 @@ class S3FDNet(nn.Module):
             output = self.detect(
                 loc.view(loc.size(0), -1, 4),
                 self.softmax(conf.view(conf.size(0), -1, 2)),
-                self.priors.type(type(x.data)).to(self.device)
+                self.priors.type(type(x.data))
                 )
         else:
             output = (
