@@ -3,45 +3,222 @@ import torch
 from torch import nn
 from torch.nn import init
 
-from .ECA import ECAAttention #Channel Attention
-from .EPSA import PSA #Channel Attention
-from .SGE import SpatialGroupEnhance  #Spatial Attention
 
+# 1. PSAをそのまま使用する
 
-# BAMベース
-class Attention_1(nn.Module):
+# 2. PSA+ECA
+def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, groups=1):
+    """standard convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
+                     padding=padding, dilation=dilation, groups=groups, bias=False)
 
-    def __init__(self, channel):
+class ECAWeight(nn.Module):
+
+    def __init__(self, kernel_size=3):
         super().__init__()
-        self.ca=ECAAttention(kernel_size=3)
-        self.sa=SpatialGroupEnhance(groups=8)
+        self.avg_pool=nn.AdaptiveAvgPool2d(1)
+        self.conv=nn.Conv1d(1,1,kernel_size=kernel_size,padding=(kernel_size-1)//2)
         self.sigmoid=nn.Sigmoid()
 
     def forward(self, x):
-        b, c, _, _ = x.size()
-        sa_out=self.sa(x)
-        ca_out=self.ca(x)
-        weight=self.sigmoid(sa_out+ca_out)
-        out=(1+weight)*x
-        return out
+        out = self.avg_pool(x)
+        out=out.squeeze(-1).permute(0,2,1) #bs,1,c
+        out=self.conv(out) #bs,1,c
+        out=self.sigmoid(out) #bs,1,c
+        weight=out.permute(0,2,1).unsqueeze(-1) #bs,c,1,1
 
-# CBAMベース
-class CBAM(nn.Module):
+        return weight
 
-    def __init__(self,channel):
-        super().__init__()
-        self.ca=PSA(channel=channel)
-        self.sa=SpatialGroupEnhance(groups=8)
+class PSA_ECA(nn.Module):
+
+    def __init__(self, channel, conv_kernels=[3, 5, 7, 9], stride=1, conv_groups=[1, 4, 8, 16]):
+        super(PSA_ECA, self).__init__()
+        self.conv_1 = conv(channel, channel//4, kernel_size=conv_kernels[0], padding=conv_kernels[0]//2,
+                            stride=stride, groups=conv_groups[0])
+        self.conv_2 = conv(channel, channel//4, kernel_size=conv_kernels[1], padding=conv_kernels[1]//2,
+                            stride=stride, groups=conv_groups[1])
+        self.conv_3 = conv(channel, channel//4, kernel_size=conv_kernels[2], padding=conv_kernels[2]//2,
+                            stride=stride, groups=conv_groups[2])
+        self.conv_4 = conv(channel, channel//4, kernel_size=conv_kernels[3], padding=conv_kernels[3]//2,
+                            stride=stride, groups=conv_groups[3])
+        self.se = ECAWeight(kernel_size=3)
+        self.split_channel = channel // 4
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        b, c, _, _ = x.size()
-        residual=x
-        out=x*self.ca(x)
-        out=out*self.sa(out)
-        return out+residual
+        batch_size = x.shape[0]
+        x1 = self.conv_1(x)
+        x2 = self.conv_2(x)
+        x3 = self.conv_3(x)
+        x4 = self.conv_4(x)
 
-# Shuffleベース
+        feats = torch.cat((x1, x2, x3, x4), dim=1)
+        feats = feats.view(batch_size, 4, self.split_channel, feats.shape[2], feats.shape[3])
+
+        x1_se = self.se(x1)
+        x2_se = self.se(x2)
+        x3_se = self.se(x3)
+        x4_se = self.se(x4)
+
+        x_se = torch.cat((x1_se, x2_se, x3_se, x4_se), dim=1)
+        attention_vectors = x_se.view(batch_size, 4, self.split_channel, 1, 1)
+        attention_vectors = self.softmax(attention_vectors)
+        feats_weight = feats * attention_vectors
+        for i in range(4):
+            x_se_weight_fp = feats_weight[:, i, :, :]
+            if i == 0:
+                out = x_se_weight_fp
+            else:
+                out = torch.cat((x_se_weight_fp, out), 1)
+
+        return out
+
+
+# 3. PSA＋SGE
+class SEWeightModule(nn.Module):
+
+    def __init__(self, channels, reduction=16):
+        super(SEWeightModule, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc1 = nn.Conv2d(channels, channels//reduction, kernel_size=1, padding=0)
+        self.relu = nn.ReLU(inplace=True)
+        self.fc2 = nn.Conv2d(channels//reduction, channels, kernel_size=1, padding=0)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        out = self.avg_pool(x)
+        out = self.fc1(out)
+        out = self.relu(out)
+        out = self.fc2(out)
+        weight = self.sigmoid(out)
+
+        return weight
+
+class PSA_SGE(nn.Module):
+
+    def __init__(self, channel, groups=4):
+        super(PSA_SGE, self).__init__()
+        self.se = SEWeightModule(channel // 4)
+        self.split_channel = channel // 4
+        self.softmax = nn.Softmax(dim=1)
+
+        # SGE
+        self.groups=groups
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.weight=nn.Parameter(torch.zeros(1,groups,1,1))
+        self.bias=nn.Parameter(torch.zeros(1,groups,1,1))
+        self.sig=nn.Sigmoid()
+
+        self.cahnnel = channel//self.groups
+
+    def forward(self, x):
+        batch_size, c, h,w=x.shape
+        x=x.view(batch_size*self.groups,-1,h,w) #bs*g,dim//g,h,w
+        xn=x*self.avg_pool(x) #bs*g,dim//g,h,w
+        xn=xn.sum(dim=1,keepdim=True) #bs*g,1,h,w
+        t=xn.view(batch_size*self.groups,-1) #bs*g,h*w
+
+        t=t-t.mean(dim=1,keepdim=True) #bs*g,h*w
+        std=t.std(dim=1,keepdim=True)+1e-5
+        t=t/std #bs*g,h*w
+        t=t.view(batch_size,self.groups,h,w) #bs,g,h*w
+        
+        t=t*self.weight+self.bias #bs,g,h*w
+        t=t.view(batch_size*self.groups,1,h,w) #bs*g,1,h,w
+        x=x*self.sig(t)
+        x =x.view(batch_size,c,h,w)
+        feats = x.view(batch_size, 4, self.split_channel, x.shape[2], x.shape[3])
+
+        x1 = x[:,:self.cahnnel,:,:]
+        x2 = x[:,self.cahnnel:self.cahnnel*2,:,:]
+        x3 = x[:,self.cahnnel*2:self.cahnnel*3,:,:]
+        x4 = x[:,self.cahnnel*3:,:,:]
+
+        x1_se = self.se(x1)
+        x2_se = self.se(x2)
+        x3_se = self.se(x3)
+        x4_se = self.se(x4)
+
+
+        x_se = torch.cat((x1_se, x2_se, x3_se, x4_se), dim=1)
+        attention_vectors = x_se.view(batch_size, 4, self.split_channel, 1, 1)
+        attention_vectors = self.softmax(attention_vectors)
+        feats_weight = feats * attention_vectors
+        for i in range(4):
+            x_se_weight_fp = feats_weight[:, i, :, :]
+            if i == 0:
+                out = x_se_weight_fp
+            else:
+                out = torch.cat((x_se_weight_fp, out), 1)
+
+        return out
+
+
+# 4. PSA+SGE+ECA
+class PSA_SGE_ECA(nn.Module):
+
+    def __init__(self, channel, groups=4):
+        super(PSA_SGE_ECA, self).__init__()
+        self.split_channel = channel // 4
+        self.softmax = nn.Softmax(dim=1)
+
+        self.se = ECAWeight(kernel_size=3)
+
+        # SGE
+        self.groups=groups
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.weight=nn.Parameter(torch.zeros(1,groups,1,1))
+        self.bias=nn.Parameter(torch.zeros(1,groups,1,1))
+        self.sig=nn.Sigmoid()
+
+        self.cahnnel = channel//self.groups
+
+    def forward(self, x):
+        batch_size, c, h,w=x.shape
+        x=x.view(batch_size*self.groups,-1,h,w) #bs*g,dim//g,h,w
+        xn=x*self.avg_pool(x) #bs*g,dim//g,h,w
+        xn=xn.sum(dim=1,keepdim=True) #bs*g,1,h,w
+        t=xn.view(batch_size*self.groups,-1) #bs*g,h*w
+
+        t=t-t.mean(dim=1,keepdim=True) #bs*g,h*w
+        std=t.std(dim=1,keepdim=True)+1e-5
+        t=t/std #bs*g,h*w
+        t=t.view(batch_size,self.groups,h,w) #bs,g,h*w
+        
+        t=t*self.weight+self.bias #bs,g,h*w
+        t=t.view(batch_size*self.groups,1,h,w) #bs*g,1,h,w
+        x=x*self.sig(t)
+        x =x.view(batch_size,c,h,w)
+        feats = x.view(batch_size, 4, self.split_channel, x.shape[2], x.shape[3])
+
+        x1 = x[:,:self.cahnnel,:,:]
+        x2 = x[:,self.cahnnel:self.cahnnel*2,:,:]
+        x3 = x[:,self.cahnnel*2:self.cahnnel*3,:,:]
+        x4 = x[:,self.cahnnel*3:,:,:]
+
+        x1_se = self.se(x1)
+        x2_se = self.se(x2)
+        x3_se = self.se(x3)
+        x4_se = self.se(x4)
+
+
+        x_se = torch.cat((x1_se, x2_se, x3_se, x4_se), dim=1)
+        attention_vectors = x_se.view(batch_size, 4, self.split_channel, 1, 1)
+        attention_vectors = self.softmax(attention_vectors)
+        feats_weight = feats * attention_vectors
+        for i in range(4):
+            x_se_weight_fp = feats_weight[:, i, :, :]
+            if i == 0:
+                out = x_se_weight_fp
+            else:
+                out = torch.cat((x_se_weight_fp, out), 1)
+
+        return out
+
+
+# 5. Suffle Attention
 from torch.nn.parameter import Parameter
+
 class ShuffleAttention(nn.Module):
 
     def __init__(self, channel,reduction=16,G=8):
@@ -55,6 +232,22 @@ class ShuffleAttention(nn.Module):
         self.sweight = Parameter(torch.zeros(1, channel // (2 * G), 1, 1))
         self.sbias = Parameter(torch.ones(1, channel // (2 * G), 1, 1))
         self.sigmoid=nn.Sigmoid()
+
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.kaiming_normal_(m.weight, mode='fan_out')
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                init.constant_(m.weight, 1)
+                init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                init.normal_(m.weight, std=0.001)
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
+
 
     @staticmethod
     def channel_shuffle(x, groups):
@@ -94,56 +287,8 @@ class ShuffleAttention(nn.Module):
         return out
 
 
-# EPSAベース
-class PSA(nn.Module):
-
-    def __init__(self, channel,reduction=8,S=4):
-        super().__init__()
-        self.S=S
-
-        self.convs=[]
-        for i in range(S):
-            self.convs.append(nn.Conv2d(channel//S,channel//S,kernel_size=2*(i+1)+1,padding=i+1))
-
-        self.se_blocks=[]
-        for i in range(S):
-            self.se_blocks.append(nn.Sequential(
-                nn.AdaptiveAvgPool2d(1),
-                nn.Conv2d(channel//S, channel // (S*reduction),kernel_size=1, bias=False),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(channel // (S*reduction), channel//S,kernel_size=1, bias=False),
-                nn.Sigmoid()
-            ))
-        
-        self.softmax=nn.Softmax(dim=1)
-
-    def forward(self, x):
-        b, c, h, w = x.size()
-
-        #Step1:SPC module
-        SPC_out=x.view(b,self.S,c//self.S,h,w) #bs,s,ci,h,w
-        for idx,conv in enumerate(self.convs):
-            SPC_out[:,idx,:,:,:]=conv(SPC_out[:,idx,:,:,:])
-
-        #Step2:SE weight
-        se_out=[]
-        for idx,se in enumerate(self.se_blocks):
-            se_out.append(se(SPC_out[:,idx,:,:,:]))
-        SE_out=torch.stack(se_out,dim=1)
-        SE_out=SE_out.expand_as(SPC_out)
-
-        #Step3:Softmax
-        softmax_out=self.softmax(SE_out)
-
-        #Step4:SPA
-        PSA_out=SPC_out*softmax_out
-        PSA_out=PSA_out.view(b,-1,h,w)
-
-        return PSA_out
-
-
 input=torch.randn(1,256,160,160)
-se = PSA(channel=256)
-output=se(input)
+attention = ShuffleAttention(channel=256)
+output=attention(input)
 print(output.shape)
 
