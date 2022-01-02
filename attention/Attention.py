@@ -3,9 +3,9 @@ import torch
 from torch import nn
 from torch.nn import init
 
-from ECA import ECAAttention #Channel Attention
-from EPSA import PSA #Channel Attention
-from SGE import SpatialGroupEnhance  #Spatial Attention
+from .ECA import ECAAttention #Channel Attention
+from .EPSA import PSA #Channel Attention
+from .SGE import SpatialGroupEnhance  #Spatial Attention
 
 
 # BAMベース
@@ -26,7 +26,7 @@ class Attention_1(nn.Module):
         return out
 
 # CBAMベース
-class Attention_2(nn.Module):
+class CBAM(nn.Module):
 
     def __init__(self,channel):
         super().__init__()
