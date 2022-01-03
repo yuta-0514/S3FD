@@ -105,7 +105,7 @@ class S3FDNet(nn.Module):
 
         if self.phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
-            self.detect = Detect()
+            self.detect = Detect.apply
 
     def forward(self, x):
         size = x.size()[2:]
@@ -172,7 +172,7 @@ class S3FDNet(nn.Module):
             output = self.detect(
                 loc.view(loc.size(0), -1, 4),
                 self.softmax(conf.view(conf.size(0), -1, 2)),
-                self.priors.type(type(x.data)).to(self.device)
+                self.priors.type(type(x.data))#.to(self.device)
                 )
         else:
             output = (
