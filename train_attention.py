@@ -211,7 +211,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='S3FD face Detector Training With Pytorch')
     # parser.add_argument('--dataset',default='face',help='Train target')
-    parser.add_argument('--epochs', default=90, type=int, metavar='N',
+    parser.add_argument('--epochs', default=300, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--batch_size',default=4, type=int,
                         help='Batch size for training')
