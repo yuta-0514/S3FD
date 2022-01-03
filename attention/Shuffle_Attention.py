@@ -70,7 +70,7 @@ class SABlock(nn.Module):
 
     def __init__(self, channel, stride=1, downsample=None, groups=1,
                  base_width=64, dilation=1, norm_layer=None):
-        super(SABottleneck, self).__init__()
+        super(SABlock, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(channel//4 * (base_width / 64.)) * groups
