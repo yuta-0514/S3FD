@@ -81,23 +81,17 @@ class PSA(nn.Module):
 
 
 class EPSABlock(nn.Module):
-    expansion = 4
 
-    def __init__(self, channel, stride=1, downsample=None, norm_layer=None, conv_kernels=[3, 5, 7, 9],
-                 conv_groups=[1, 4, 8, 16]):
+    def __init__(self, channel):
         super(EPSABlock, self).__init__()
-        if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
-        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
-        self.conv1 = conv1x1(channel, channel//4)
-        self.bn1 = norm_layer(channel//4)
-        self.conv2 = PSA(channel//4, stride=stride, conv_kernels=conv_kernels, conv_groups=conv_groups)
-        self.bn2 = norm_layer(channel//4)
-        self.conv3 = conv1x1(channel//4, channel//4 * self.expansion)
-        self.bn3 = norm_layer(channel//4 * self.expansion)
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-        self.stride = stride
+
+        self.conv1 = conv1x1(in_planes=channel, out_planes=channel//4)
+        self.bn1 = nn.BatchNorm2d(channel//4)
+        self.conv2 = PSA(channel=channel//4)
+        self.bn2 = nn.BatchNorm2d(channel//4)
+        self.conv3 = conv1x1(in_planes=channel//4, out_planes=channel)
+        self.bn3 = nn.BatchNorm2d(channel)
+        self.relu = nn.ReLU(inplace=False)
 
     def forward(self, x):
         identity = x
@@ -113,10 +107,7 @@ class EPSABlock(nn.Module):
         out = self.conv3(out)
         out = self.bn3(out)
 
-        if self.downsample is not None:
-            identity = self.downsample(x)
-
-        out += identity
+        out = out + identity
         out = self.relu(out)
         return out
 

@@ -3,24 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.Shuffle_Attention import SABlock
+from attention.EPSA import EPSABlock,PSA
 
-class SEBlock(nn.Module):
-    def __init__(self, channel, reduction=16):
-        super(SEBlock, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
-        )
 
-    def forward(self, x):
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y.expand_as(x)
 
 class L2Norm(nn.Module):
 
@@ -49,52 +34,55 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.SABlock64 = SABlock(channel=64)
-        self.SABlock128 = SABlock(channel=128)
-        self.SABlock256 = SABlock(channel=256)
-        self.SABlock512 = SABlock(channel=512)
-        self.SABlock1024 = SABlock(channel=1024)
+        self.PSA128 = PSA(channel=128)
+        self.PSA256 = PSA(channel=256)
+        self.PSA512 = PSA(channel=512)
+        self.PSA1024 = PSA(channel=1024)
+
+        self.EPSABlock256 = EPSABlock(channel=256)
+        self.EPSABlock512 = EPSABlock(channel=512)
+        self.EPSABlock1024 = EPSABlock(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.SABlock64,
+            nn.Conv2d(64, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(64, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.SABlock128,
+            nn.Conv2d(128, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
             
             nn.Conv2d(128, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.SABlock256,
+            self.EPSABlock256,
             nn.ReLU(inplace=True),
-            self.SABlock256,
+            self.EPSABlock256,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2, ceil_mode=True),
             
             nn.Conv2d(256, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.SABlock512,
+            self.EPSABlock512,
             nn.ReLU(inplace=True),
-            self.SABlock512,
+            self.EPSABlock512,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            self.SABlock512,
+            self.EPSABlock512,
             nn.ReLU(inplace=True),
-            self.SABlock512,
+            self.EPSABlock512,
             nn.ReLU(inplace=True),
-            self.SABlock512,
+            self.EPSABlock512,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 1024, 3, 1, padding=6, dilation=6),
             nn.ReLU(inplace=True),
-            self.SABlock1024,
+            self.EPSABlock1024,
             nn.ReLU(inplace=True),
         ])
 
@@ -139,35 +127,35 @@ class S3FDNet(nn.Module):
 
         for k in range(16):
             x = self.vgg[k](x)
-        s = self.SABlock256(x)
+        s = self.PSA256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
-        s = self.SABlock512(x)
+        s = self.PSA512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
-        s = self.SABlock512(x)
+        s = self.PSA512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.SABlock1024(x)
+        x = self.PSA1024(x)
         sources.append(x)
         
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.SABlock512(x)
+                x = self.PSA512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.SABlock256(x)
+                x = self.PSA256(x)
                 sources.append(x)
             else :
                 continue
