@@ -95,7 +95,7 @@ class SEWeightModule(nn.Module):
 
 # 3. 3×3Conv -> EPSA
 
-# 4. Suffle Attentionをそのまま利用する
+# 4. 3×3Conv ->Suffle Attention
 
 input=torch.randn(1,256,160,160)
 psa = PSA_ECA(channel=256)
