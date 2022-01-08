@@ -241,7 +241,7 @@ def main():
     if args.masked==True:
         train_dataset, val_dataset = make_masked_dataset()
     else:
-        train_dataset, val_dataset = make_masked_dataset()
+        train_dataset, val_dataset = make_dataset()
 
     train_loader = data.DataLoader(train_dataset, args.batch_size,
                                 num_workers=4,
