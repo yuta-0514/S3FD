@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.Attention import PSA_SGE
+from attention.Attention import PSA_ECA
 
 class L2Norm(nn.Module):
 
@@ -32,10 +32,10 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.PSA_SGE128 = PSA_SGE(channel=128)
-        self.PSA_SGE256 = PSA_SGE(channel=256)
-        self.PSA_SGE512 = PSA_SGE(channel=512)
-        self.PSA_SGE1024 = PSA_SGE(channel=1024)
+        self.PSA_ECA128 = PSA_ECA(channel=128)
+        self.PSA_ECA256 = PSA_ECA(channel=256)
+        self.PSA_ECA512 = PSA_ECA(channel=512)
+        self.PSA_ECA1024 = PSA_ECA(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
@@ -122,33 +122,33 @@ class S3FDNet(nn.Module):
         for k in range(16):
             x = self.vgg[k](x)
         s = self.L2Norm3_3(x)
-        s = self.PSA_SGE256(s)
+        s = self.PSA_ECA256(s)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
         s = self.L2Norm4_3(x)
-        s = self.PSA_SGE512(s)
+        s = self.PSA_ECA512(s)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
         s = self.L2Norm5_3(x)
-        s = self.PSA_SGE512(s)
+        s = self.PSA_ECA512(s)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.PSA_SGE1024(x)
+        x = self.PSA_ECA1024(x)
         sources.append(x)
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.PSA_SGE512(x)
+                x = self.PSA_ECA512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.PSA_SGE256(x)
+                x = self.PSA_ECA256(x)
                 sources.append(x)
             else :
                 continue
