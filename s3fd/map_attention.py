@@ -187,7 +187,7 @@ class S3FDNet(nn.Module):
             output = self.detect(
                 loc.view(loc.size(0), -1, 4),
                 self.softmax(conf.view(conf.size(0), -1, 2)),
-                self.priors.type(type(x.data))
+                self.priors.type(type(x.data)).to(self.device)
                 )
         else:
             output = (
