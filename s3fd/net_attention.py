@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.EPSA import EPSABlock,PSA
-
+from attention.Attention import PSA_ECA
 
 
 class L2Norm(nn.Module):
@@ -34,55 +33,52 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.PSA128 = PSA(channel=128)
-        self.PSA256 = PSA(channel=256)
-        self.PSA512 = PSA(channel=512)
-        self.PSA1024 = PSA(channel=1024)
-
-        self.EPSABlock256 = EPSABlock(channel=256)
-        self.EPSABlock512 = EPSABlock(channel=512)
-        self.EPSABlock1024 = EPSABlock(channel=1024)
+        self.PSA_ECA64 = PSA_ECA(channel=64)
+        self.PSA_ECA128 = PSA_ECA(channel=128)
+        self.PSA_ECA256 = PSA_ECA(channel=256)
+        self.PSA_ECA512 = PSA_ECA(channel=512)
+        self.PSA_ECA1024 = PSA_ECA(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 3, 1, padding=1),
+            self.PSA_ECA64,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(64, 128, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 3, 1, padding=1),
+            self.PSA_ECA128,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
             
             nn.Conv2d(128, 256, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.EPSABlock256,
+            self.PSA_ECA256,
             nn.ReLU(inplace=True),
-            self.EPSABlock256,
+            self.PSA_ECA256,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2, ceil_mode=True),
             
             nn.Conv2d(256, 512, 3, 1, padding=1),
             nn.ReLU(inplace=True),
-            self.EPSABlock512,
+            self.PSA_ECA512,
             nn.ReLU(inplace=True),
-            self.EPSABlock512,
+            self.PSA_ECA512,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            self.EPSABlock512,
+            self.PSA_ECA512,
             nn.ReLU(inplace=True),
-            self.EPSABlock512,
+            self.PSA_ECA512,
             nn.ReLU(inplace=True),
-            self.EPSABlock512,
+            self.PSA_ECA512,
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
             nn.Conv2d(512, 1024, 3, 1, padding=6, dilation=6),
             nn.ReLU(inplace=True),
-            self.EPSABlock1024,
+            self.PSA_ECA1024,
             nn.ReLU(inplace=True),
         ])
 
@@ -127,35 +123,35 @@ class S3FDNet(nn.Module):
 
         for k in range(16):
             x = self.vgg[k](x)
-        s = self.PSA256(x)
+        s = self.PSA_ECA256(x)
         s = self.L2Norm3_3(x)
         sources.append(s)
 
         for k in range(16, 23):
             x = self.vgg[k](x)
-        s = self.PSA512(x)
+        s = self.PSA_ECA512(x)
         s = self.L2Norm4_3(x)
         sources.append(s)
 
         for k in range(23, 30):
             x = self.vgg[k](x)
-        s = self.PSA512(x)
+        s = self.PSA_ECA512(x)
         s = self.L2Norm5_3(x)
         sources.append(s)
 
         for k in range(30, len(self.vgg)):
             x = self.vgg[k](x)
-        x = self.PSA1024(x)
+        x = self.PSA_ECA1024(x)
         sources.append(x)
         
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k == 1:
-                x = self.PSA512(x)
+                x = self.PSA_ECA512(x)
                 sources.append(x)
             elif k == 3:
-                x = self.PSA256(x)
+                x = self.PSA_ECA256(x)
                 sources.append(x)
             else :
                 continue
