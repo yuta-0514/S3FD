@@ -4,7 +4,7 @@ from torch import nn
 from torch.nn import init
 
 
-# 1. PSA+ECA
+# PSA+ECA
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, groups=1):
     """standard convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
@@ -72,7 +72,6 @@ class PSA_ECA(nn.Module):
         return out
 
 
-# 2. PSA＋SGE -> △
 class SEWeightModule(nn.Module):
 
     def __init__(self, channels, reduction=16):
@@ -92,12 +91,9 @@ class SEWeightModule(nn.Module):
 
         return weight
 
-
-# 3. 3×3Conv -> EPSA
-
-# 4. 3×3Conv ->Suffle Attention
-
+'''
 input=torch.randn(1,256,160,160)
 psa = PSA_ECA(channel=256)
 output=psa(input)
 print(output.shape)
+'''
