@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from s3fd.box_utils import PriorBox,Detect
-from attention.Attention import PSA_ECA
+from attention.Attention import PSA
 
 class L2Norm(nn.Module):
 
@@ -32,10 +32,10 @@ class S3FDNet(nn.Module):
         self.device = 'cuda'
         self.phase = phase
 
-        self.PSA_ECA128 = PSA_ECA(channel=128)
-        self.PSA_ECA256 = PSA_ECA(channel=256)
-        self.PSA_ECA512 = PSA_ECA(channel=512)
-        self.PSA_ECA1024 = PSA_ECA(channel=1024)
+        self.PSA_ECA128 = PSA(channel=128)
+        self.PSA_ECA256 = PSA(channel=256)
+        self.PSA_ECA512 = PSA(channel=512)
+        self.PSA_ECA1024 = PSA(channel=1024)
 
         self.vgg = nn.ModuleList([
             nn.Conv2d(3, 64, 3, 1, padding=1),
