@@ -1,3 +1,4 @@
+import os
 import argparse
 import time
 import numpy as np
@@ -9,7 +10,7 @@ from PIL import Image
 from s3fd.nets import S3FDNet
 from s3fd.box_utils import nms_
 
-PATH_WEIGHT = '/mnt/weights/model_best_nomask.pth'
+PATH_WEIGHT = '/mnt/weights/S3FD/model_best_nomask.pth'
 
 
 class S3FD():
@@ -103,8 +104,11 @@ def draw_bboxes(image, bounding_boxes, fill=0.0, thickness=3):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--image_path', type=str, default='test.jpg')
+    parser.add_argument('-i', '--image_path', type=str, default='demo.jpg')
     args = parser.parse_args()
+
+    if not os.path.exists('./result'):
+        os.mkdir('./result')
 
     # load image with cv in RGB.
     IMAGE_PATH = args.image_path
@@ -119,16 +123,7 @@ def main():
     print('S3FD : %d faces in %.4f seconds.' % (len(bboxes), time.time() - t))
     img1 = draw_bboxes(img, bboxes)
     sizes = []
-
     print(bboxes)
-
-    '''
-    for box in bboxes:
-        sizes.append((box[2] - box[0]) * (box[3] - box[1]))
-    print(min(sizes))
-    print(max(sizes))
-    '''
-
     pil_img = Image.fromarray(img1)
     pil_img.save('./result/test.jpg')
 
