@@ -10,13 +10,12 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 from torch.autograd import Variable
-import torch.distributed as dist
 import torch.backends.cudnn as cudnn
-
 
 from dataset import make_dataset, detection_collate
 from dataset import make_masked_dataset #Masked face
-from s3fd.map_attention import S3FDNet,weights_init
+from s3fd.nets import S3FDNet,weights_init
+from s3fd.map_attention import S3FD_att
 from s3fd.multiboxloss import MultiBoxLoss
 from s3fd.box_utils import PriorBox
 
@@ -215,21 +214,17 @@ def main():
                         help='number of total epochs to run')
     parser.add_argument('--batch_size',default=4, type=int,
                         help='Batch size for training')
-    parser.add_argument('--distributed', default=True, type=str,
-                        help='use distribute training')
     parser.add_argument('--masked', default=False, 
                         help="use-masked data", action="store_true")
-
+    parser.add_argument('--attention', default=False, 
+                        help="use attention module", action="store_true")
     args = parser.parse_args()
-
 
     cudnn.benchmark = True
 
     if not os.path.exists('/mnt/weights/'):
         os.mkdir('/mnt/weights/')
 
-
-    args = parser.parse_args()
     minmum_loss = np.inf
     args.gpu = 0
     world_size = 1
@@ -258,7 +253,10 @@ def main():
 
     # build S3FD 
     print("Building net...")
-    s3fd_net = S3FDNet('train')
+    if args.attention==True:
+        s3fd_net = S3FD_att('train')
+    else:
+        s3fd_net = S3FDNet('train')
     model = s3fd_net
 
     # 学習済みのvggを取得

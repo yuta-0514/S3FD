@@ -25,10 +25,10 @@ class L2Norm(nn.Module):
         return out
 
 
-class S3FDNet(nn.Module):
+class S3FD_att(nn.Module):
 
     def __init__(self, phase='train'):
-        super(S3FDNet, self).__init__()
+        super(S3FD_att, self).__init__()
         self.device = 'cuda'
         self.phase = phase
 
