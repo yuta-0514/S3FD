@@ -1,4 +1,4 @@
-FROM nvidia/cuda:10.1-cudnn7-runtime-ubuntu18.04
+FROM nvidia/cuda:11.3.0-cudnn8-devel-ubuntu18.04
 
 COPY requirements.txt /.
 
